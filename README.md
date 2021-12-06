@@ -7,9 +7,21 @@
 
 <!-- badges: end -->
 
-This repository contains code that accompanies: *Using Airborne LiDAR to
-Map Red Alder in the Sappho Long-Term Ecosystem Productivity Study*.
-This manuscript is still in development.
+This repository contains code that accompanies:
+
+***Using Airborne LiDAR to Map Red Alder in the Sappho Long-Term
+Ecosystem Productivity Study***
+
+Ally Kruper<sup>1</sup>, Robert J. McGaughey<sup>2</sup>, Sarah
+Crumrine<sup>1</sup>, Bernard Bormann<sup>1</sup>, Keven
+Bennett<sup>1</sup>, Courtney Bobsin<sup>1</sup>
+
+<sup>1</sup>School of Environmental and Forest Sciences, University of
+Washington, Seattle, WA 98195, USA  
+<sup>2</sup> Pacific Northwest Research Station, USDA Forest Service,
+University of Washington, Seattle, WA 98195, USA
+
+***This manuscript is still in development.***
 
 The goal of this R code is to perform basic data processing to assemble
 data and then develop a classification model using lidar-derived metrics
