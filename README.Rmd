@@ -16,10 +16,38 @@ knitr::opts_chunk$set(
 <!-- badges: start -->
 <!-- badges: end -->
 
-This repository contains code that accompanies:
-ADD MANUSCRIPT INFORMATION
+This repository contains code that accompanies: *Using Airborne LiDAR to Map Red Alder in the Sappho
+Long-Term Ecosystem Productivity Study*. This manuscript is still in development.
 
-The goal of this R code is to perform a classification using lidar-derived metrics to identify red alder (alnus rubra) in a study area
-located on the northwest corner of the Olympic Peninsula in Washington state (USA).
+The goal of this R code is to perform basic data processing to assemble data and then develop a classification model using 
+lidar-derived metrics to identify red alder (alnus rubra) in a study area located in the northwest corner of the Olympic
+Peninsula in Washington state (USA). the code is divided into two parts. The first processes field measurements and LAS
+point cloud data to generate metrics used for the classification model development. the second part, fits the classification
+model and generates test statistics.
 
-This code is provided for the enlightenment of readers and is provided as-is.
+**Code is actually in two files: RA_classification.E and ComparisonTable.R. The first file has the point cloud processing 
+and the code for the original model development. The second has only the model fitting and testing code. I am pretty sure that
+the second file produces all of the results presented in the manuscript.**
+
+This code is provided "as-is" for the enlightenment of readers.
+
+# Requirements
+
+Full execution of this code requires a working installation of the
+[FUSION](http://forsys.cfr.washington.edu/fusion/fusionlatest.html) lidar processing software
+developed by Robert J. McGaughey with the USDA Forest Service. This means that the full code will
+only work on Windows platforms. To allow execution without FUSION, the lidar metrics have been
+provided in CSV format and there is an option in the code to allow reading the provided lidar
+metrics or recomputing them from the lidar point data. However, the point data for the study area
+are not included in this repository so they will need to be downloaded from the Washington state
+lidar collection. Instructions for the download are below. The code also uses a variety of input
+files in Excel spreadsheet format. These files are included in the Data folder.
+
+# Downloading lidar point data (optional)
+
+Lidar point data for this project area available from the collection of lidar data maintained by the Washington State Department
+of Natural Resources (link). The portal allows you to define an area of interest by stroking a box. You will need to zoom to 
+the NW corner of the Olympic Peninsula and then select the "Area of Interst" tool and then stroke a box with the lower left 
+corner at (48.04842, -124.30395) and the upper right corner at (48.06575, -124.27460).  Select only the point cloud data 
+for the SolDuc 2015 lidar project and click "Download". Data will be delivered as a zip file. Unzip the file into a new folder. 
+You will need to modify the code to use your folder name (line where the ????? variable is defined: line ?????).
