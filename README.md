@@ -26,17 +26,13 @@ University of Washington, Seattle, WA 98195, USA
 The goal of this R code is to perform basic data processing to assemble
 data and then develop a classification model using lidar-derived metrics
 to identify red alder (alnus rubra) in a study area located in the
-northwest corner of the Olympic Peninsula in Washington state (USA). the
-code is divided into two parts. The first processes field measurements
-and LAS point cloud data to generate metrics used for the classification
-model development. the second part, fits the classification model and
-generates test statistics.
-
-**Code is actually in two files: RA\_classification.E and
-ComparisonTable.R. The first file has the point cloud processing and the
-code for the original model development. The second has only the model
-fitting and testing code. I am pretty sure that the second file produces
-all of the results presented in the manuscript.**
+northwest corner of the Olympic Peninsula in Washington state (USA). The
+code is divided into two parts. The first, RA\_classification.R,
+processes field measurements and LAS point cloud data to generate
+metrics used for the classification model development. The second part,
+ComparisonTable.R, fits the classification model and generates test
+statistics. The majority of the results presented in the manuascript are
+generate by the code in ComparisonTable.R.
 
 This code is provided “as-is” for the enlightenment of readers.
 

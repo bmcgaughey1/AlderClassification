@@ -22,7 +22,6 @@ library(extrafont)
 # set up folders using repository structure
 # working folder should be the root of the repository
 # *****************************************************************************
-#setwd("G:/R_Stuff/RAClassification")
 setwd("~/AlderClassification")
 
 resultsFolder <- "~/AlderClassification/results/"
@@ -32,7 +31,7 @@ dataFolder <- "~/AlderClassification/data/"
 # variables to control some things in the code below
 # *****************************************************************************
 modelType <- "ALRU"
-#modeType <- "PSME"
+#modeType <- "PSME"   # code not tested gor this model
 
 seed <- 38294579
 set.seed(seed)
@@ -105,7 +104,7 @@ allData <- dplyr::filter(allData, DBH_cm >= 10)
 
 trainData <- allData
 
-# filter using overlap information
+# filter using overlap information for crowns
 # *********** used for initial testing but found that including the overlapped trees
 # gave better predictions for the hold-out testing data
 trainData_no_overlap <- dplyr::filter(allData, !Overlapped | !OverlapSpeciesDifferent)
@@ -123,12 +122,13 @@ trainData_no_overlap <- na.omit(trainData_no_overlap)
 
 # look at Mood's median test to check significance of the difference in group median values
 if (TRUE) {
-  median_test(Int.IQ ~ SpeciesGroup, data = trainData)
-  median_test(First.Int.P60 ~ SpeciesGroup, data = trainData)
-  median_test(First.mean.minus.Last.mean ~ SpeciesGroup, data = trainData)
-  median_test(Int.P30 ~ SpeciesGroup, data = trainData)
+  median_test(Int.IQ ~ SpeciesGroup, data = trainData, conf.level = 0.99)
+  median_test(First.Int.P60 ~ SpeciesGroup, data = trainData, conf.level = 0.99)
+  median_test(First.mean.minus.Last.mean ~ SpeciesGroup, data = trainData, conf.level = 0.99)
+  median_test(Int.P30 ~ SpeciesGroup, data = trainData, conf.level = 0.99)
 }
 
+# plots for metrics...first uses bse plot() and second uses ggplot2
 if (showInfo) {
   # get counts by SpeciesGroup
   table(t_absolutely_no_overlap$SpeciesGroup)
@@ -169,7 +169,7 @@ if (showInfo) {
     #  ylab(expression(80th~percentile~of~first~return~intensity)) +
     xlab("") +
     theme(axis.text.y = element_text(angle = 90, hjust = 0.5)) +
-    theme(legend.position="none", text=element_text(size=fs,  family=ff), plot.margin=unit(c(0.1,0.5,0,0.5),"cm"))
+    theme(legend.position="none", text=element_text(size=fs,  family=ff), plot.margin=unit(c(0.1,0.1,0,0.5),"cm"))
   P30 <- ggplot(data = trainData, mapping = aes(x=SpeciesGroup, y=Int.P30, fill=SpeciesGroup)) + 
     geom_boxplot() +
     geom_hline(yintercept=(median(trainData[trainData$SpeciesGroup == "ALRU", "Int.P30"]) + median(trainData[trainData$SpeciesGroup == "CONIFER", "Int.P30"])) / 2, linetype="dashed", color = "black") +
@@ -218,6 +218,7 @@ if (showInfo) {
   grid.arrange(IQ, FP60, PEN, P30, nrow = 2, ncol = 2)
   
   # ***** export this plot as a TIFF with width set to 1024 and height to 1572...text size should be OK
+  # should be able to automate the save but I had trouble getting things to work...exported manually
 }
 
 # function to create confusion matrix and overall accuracy
@@ -467,9 +468,9 @@ for (i in 1:length(varList)) {
   )
 }
 
-saveRDS(results, "ModelResults_RF_AlderModel.rds")
+saveRDS(results, paste0(resultsFolder, "ModelResults_RF_AlderModel.rds"))
 
-results <- readRDS("ModelResults_RF_AlderModel.rds")
+results <- readRDS(paste0(resultsFolder, "ModelResults_RF_AlderModel.rds"))
 
 # subset to get all RF models and threshold models for our 4 variables
 varList <- c(NA, "Int.IQ", "Int.P30", "First.Int.P60", "First.mean.minus.Last.mean")
