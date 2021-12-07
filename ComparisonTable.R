@@ -1,7 +1,7 @@
 # code to fit models and generate comparison table for RA classification paper
 #
 # *****************************************************************************
-# Basic setup stuff
+# packages...may not need all of these for the code below
 # *****************************************************************************
 library(sf)
 library(raster)
@@ -18,14 +18,19 @@ library(kableExtra)
 library(coin)
 library(extrafont)
 
-setwd("G:/R_Stuff/RAClassification")
+# *****************************************************************************
+# set up folders using repository structure
+# working folder should be the root of the repository
+# *****************************************************************************
+#setwd("G:/R_Stuff/RAClassification")
+setwd("~/AlderClassification")
 
-resultsFolder <- "g:/R_Stuff/RAClassification/results/"
+resultsFolder <- "~/AlderClassification/results/"
+dataFolder <- "~/AlderClassification/data/"
 
-minRadius <- 2.0
-radiusFudgeFactor <- 1.0
-
-# this variable controls some of the code below that sets up modeling
+# *****************************************************************************
+# variables to control some things in the code below
+# *****************************************************************************
 modelType <- "ALRU"
 #modeType <- "PSME"
 
@@ -34,16 +39,18 @@ set.seed(seed)
 
 showInfo <- TRUE
 
+# *****************************************************************************
 # read data
-allData <- read.csv(paste0("AllPlots", "_ModelMetrics.csv"), stringsAsFactors = FALSE)
+# *****************************************************************************
+allData <- read.csv(paste0(dataFolder, "AllPlots", "_ModelMetrics.csv"), stringsAsFactors = FALSE)
 
 # make species a factor...necessary for random forest to do classification
 allData$Species <- as.factor(allData$Species)
 
-# add new species codes to group conifers
+# add new species codes to group conifers and minor species
 if (modelType == "ALRU") {
   # create a new "species" code that groups ACCI, PISI, and RHPU into OTHER
-  # also lumped PSME and TSHE into CONIFER type
+  # lump PSME and TSHE into CONIFER type
   allData$SpeciesGroup[allData$Species == "ALRU"] <- "ALRU"
   allData$SpeciesGroup[allData$Species == "PSME"] <- "CONIFER"
   allData$SpeciesGroup[allData$Species == "TSHE"] <- "CONIFER"
@@ -82,19 +89,18 @@ allData <- dplyr::filter(allData, SpeciesGroup != "OTHER")
 allData$SpeciesGroup <- as.factor(allData$SpeciesGroup)
 
 # drop trees with anomalies:
-# can drop all trees with Anomaly_Nu of 0
-# OR drop trees with values of 1 or 2
+# drop trees with values of 1, 2, or 6
 # Anomaly_Nu:
 # 0: No problem
-# 1: Dead tree
-# 2: Leaning tree
+# 1: Dead tree...drop
+# 2: Leaning tree...drop
 # 3: Tree shares base with other tree/forked tree
 # 4: Tree is on stump
 # 5: Tree is less than 0.5 meters away from another tree
-# 6: Check in field (location doesn't make sense for some reason or another)
+# 6: Check in field (location doesn't make sense for some reason or another)...drop
 allData <- dplyr::filter(allData, Anomaly_Nu == 0 | Anomaly_Nu == 3 | Anomaly_Nu == 4 | Anomaly_Nu == 5)
 
-# drop trees with DBH < 10cm
+# keep trees with DBH >= 10cm
 allData <- dplyr::filter(allData, DBH_cm >= 10)
 
 trainData <- allData
@@ -106,12 +112,12 @@ trainData_no_overlap <- dplyr::filter(allData, !Overlapped | !OverlapSpeciesDiff
 
 t_absolutely_no_overlap <- dplyr::filter(allData, !Overlapped)
 
-# remove things like return counts
-trainData <- trainData[, -c(1:30, 103:104, 118:131, 204:205, 212:217)]   # by SpeciesGroup
-trainData_no_overlap <- trainData_no_overlap[, -c(1:30, 103:104, 118:131, 204:205, 212:217)]   # by SpeciesGroup
+# remove columns for things like return counts
+trainData <- trainData[, -c(1:30, 103:104, 118:131, 204:205, 212:217)]
+trainData_no_overlap <- trainData_no_overlap[, -c(1:30, 103:104, 118:131, 204:205, 212:217)]
 
-# drop records for trees with no returns...RP## = NA
-# this drops 3 trees...1 had 1 point and the other 2 0 points
+# drop records for trees with too few returns to compute metrics...NA values for most metrics
+# this drops 3 trees...1 has only 1 point and the other 2 have 0 points above the height threshold
 trainData <- na.omit(trainData)
 trainData_no_overlap <- na.omit(trainData_no_overlap)
 
@@ -150,7 +156,7 @@ if (showInfo) {
   plot(trainData$SpeciesGroup, trainData$First.mean.minus.Last.mean, xlab = "Species group", ylab = "First return mean height - last return mean height (ft)")
   par(mfrow = c(1, 1))
   
-  # work on improving plots...still having problems with alignment due to superscripts in Y-axis labels
+  # work on improving plots...have problems with alignment due to superscripts in Y-axis labels
   # removed the superscripted parts
   fs <- 20
   ff <- "sans"
@@ -211,7 +217,7 @@ if (showInfo) {
 #  grid.arrange(FP80, P20, IQ, PEN, nrow = 2, ncol = 2)
   grid.arrange(IQ, FP60, PEN, P30, nrow = 2, ncol = 2)
   
-  #@ export this plot as a TIFF with width set to 1024 and height to 1572...text size should be OK
+  # ***** export this plot as a TIFF with width set to 1024 and height to 1572...text size should be OK
 }
 
 # function to create confusion matrix and overall accuracy
@@ -231,6 +237,7 @@ ACC <- function(
   (100 - model$err.rate[nrow(model$err.rate), 1] * 100)
 }
 
+# function to build simple threshold model for discrimination
 threshold <- function(
   sourceData,
   applyData,
@@ -254,6 +261,8 @@ set.seed(seed)
 
 # generate seeds for random number generator
 seeds <- runif(testIterations) * 2 * 10^9
+
+# fit models testIterations times
 for (i in 1:testIterations) {
   seed <- seeds[i]
   cat("Iteration =", i, "-- Seed =", seed, "\n")
@@ -516,4 +525,4 @@ colnames(sresults) <- c(
 )
 
 # write table
-write.csv(sresults, "AccuracyTable.csv", row.names = FALSE, na = "--")
+write.csv(sresults, paste0(resultsFolder, "AccuracyTable.csv"), row.names = FALSE, na = "--")
