@@ -53,9 +53,15 @@ files in Excel spreadsheet format. These files are included in the Data folder.
 
 # Downloading lidar point data (optional)
 
-Lidar point data for this project area available from the collection of lidar data maintained by the Washington State Department
-of Natural Resources (link). The portal allows you to define an area of interest by stroking a box. You will need to zoom to 
-the NW corner of the Olympic Peninsula and then select the "Area of Interst" tool and then stroke a box with the lower left 
-corner at (48.04842, -124.30395) and the upper right corner at (48.06575, -124.27460).  Select only the point cloud data 
-for the SolDuc 2015 lidar project and click "Download". Data will be delivered as a zip file. Unzip the file into a new folder. 
-You will need to modify the code to use your folder name (line where the ????? variable is defined: line ?????).
+Lidar point data for this project area available from the collection of lidar data maintained by the
+Washington State Department of Natural Resources (link). The portal allows you to define an area of
+interest by stroking a box. You will need to zoom to the NW corner of the Olympic Peninsula and then
+select the "Area of Interest" tool (box with red dots at corners) and then stroke a box with the
+lower left corner at (48.04842, -124.30395) and the upper right corner at (48.06575, -124.27460)
+(see figure below for approximate area). Select only the point cloud data for the SolDuc 2015 lidar
+project and click "Download". Data will be delivered as a zip file. Unzip the file into a new
+folder. You will need to modify the code to use your folder name (line where the ????? variable is
+defined: line ?????).
+
+![](README_files/WALidarPortal.png)
+
