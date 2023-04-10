@@ -4,7 +4,6 @@
 # AlderClassification
 
 <!-- badges: start -->
-
 <!-- badges: end -->
 
 This repository contains code that accompanies:
@@ -21,13 +20,16 @@ Washington, Seattle, WA 98195, USA
 <sup>2</sup> Pacific Northwest Research Station, USDA Forest Service,
 University of Washington, Seattle, WA 98195, USA
 
-***This manuscript is still in development.***
+Kruper, A.; McGaughey, R.J.; Crumrine, S.; Bormann, B.T.; Bennett, K.;
+Bobsin, C.R. Using Airborne LiDAR to Map Red Alder in the Sappho
+Long-Term Ecosystem Productivity Study. Remote Sens. 2022, 14, 1591.
+<https://doi.org/10.3390/rs14071591>
 
 The goal of this R code is to perform basic data processing to assemble
 data and then develop a classification model using lidar-derived metrics
 to identify red alder (alnus rubra) in a study area located in the
 northwest corner of the Olympic Peninsula in Washington state (USA). The
-code is divided into two parts. The first, RA\_classification.R,
+code is divided into two parts. The first, RA_classification.R,
 processes field measurements and LAS point cloud data to generate
 metrics used for the classification model development. The second part,
 ComparisonTable.R, fits the classification model and generates test
