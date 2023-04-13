@@ -361,6 +361,8 @@ processPlot <- function(
 # *****************************************************************************
 # Basic setup stuff
 # *****************************************************************************
+# I think all of these are used but not all are needed if you don't need 
+# fancy graphics or maps
 library(sf)
 library(raster)
 library(rgdal)
@@ -374,12 +376,16 @@ library(ggplot2)
 library(gridExtra)
 library(readxl)
 
-
+# This is the folder where the results will be written...make sure it exists
+# or change it to a folder that does exist
+#
+# NOTE: the DroneResults folder is not copied to the GitHub repository
 setwd("E:/Backup/R_Stuff/AlderClassification/DroneResults")
 
-# I grabbed all of the plot data from the shared google drive 8/11/2021
-# there are 2 shapefiles for each plot. One has the turning point and the other has the trees
-# the plots.txt file lists the identifiers for the plots
+# This is the folder with the plot files with adjusted locations.
+# There are 2 shapefiles for each plot. One has the turning point and the other has the trees
+# The plots.txt file lists the identifiers for the plots that have alder (non-alder plots are not
+# used in the classification model building process)
 dataFolder <- "E:/Backup/R_Stuff/RAClassification/Georeferenced_tree_plots_2020_sampling/"
 
 # this is the direct link to the shared google drive
@@ -418,11 +424,15 @@ plotList <- readLines(con)
 close(con)
 
 # read lidar plot IDs from excel workbook...only has one sheet
+# this links the plot identifiers to the folders containing lidar data for the plots.
+# for the airborne data and original classification work, all lidar data was in 
+# one folder but the drone data is split (each folder covers a single experimental unit).
 t <- read_excel("../PlotID.xlsx")
 
-# build plot identifier so we can match to lidar data folders
+# build plot identifier so we can match to lidar data folders...4 characters
 plotIDs <- substr(plotList, 1, 4)
 
+# get the folder numbers for the plot lidar data
 lidarIDs <- t[t$LTEPPlotID %in% plotIDs, ]
 
 # clear the status file
@@ -430,6 +440,7 @@ if (file.exists("PlotProcessing.txt")) {
   unlink("PlotProcessing.txt")
 }
 
+# open the log file
 logCon <- file("PlotProcessing.txt", "wt")
 
 for (i in 1:length(plotList)) {
@@ -447,12 +458,13 @@ for (i in 1:length(plotList)) {
   )
 }
 
+# close the log file
 close(logCon)
 
 #processPlot("B3E2_TP_75_50", assumedHeight = 37)
 
 # *****************************************************************************
-# merge all circles for individual plots
+# merge all circles and metrics for plots and write geopackage file
 # *****************************************************************************
 con <- file("plots.txt")
 plotList <- readLines(con)
@@ -579,21 +591,21 @@ table(modelMetrics$Species)
 # once the CSV file is generated
 # *****************************************************************************
 # this variable controls some of the code below that sets up modeling
+# don't use modelType <- "PSME" with the drone lidar data...not sure it will work
 modelType <- "ALRU"
 #modeType <- "PSME"
 
 seed <- 34567
 set.seed(seed)
 
-# read data
+# read data from above...assumes we are reading the data from the current working folder (set above)
 trainData <- read.csv(paste0("AllPlots", "_ModelMetrics.csv"), stringsAsFactors = FALSE)
 
 # make species a factor...necessary for random forest to do classification
 trainData$Species <- as.factor(trainData$Species)
 
 # drop trees with anomalies:
-# can drop all trees with Anomaly_Nu of 0
-# OR drop trees with values of 1 or 2
+# drop dead and leaning tree or trees with code 6
 # Anomaly_Nu:
 # 0: No problem
 # 1: Dead tree
@@ -605,7 +617,7 @@ trainData$Species <- as.factor(trainData$Species)
 #trainData <- dplyr::filter(trainData, Anomaly_Nu == 0)
 trainData <- dplyr::filter(trainData, Anomaly_Nu == 0 | Anomaly_Nu == 3 | Anomaly_Nu == 4 | Anomaly_Nu == 5)
 
-# drop trees with DBH < 10cm
+# keep trees with DBH >= 10cm
 trainData <- dplyr::filter(trainData, DBH_cm >= 10)
 
 # filter using overlap information
@@ -636,6 +648,7 @@ trainData %>%
 #ACCI ALRU PISI PSME RHPU TSHE  UNK UNKN 
 #0   73    4  306    1  268    0    0 
 
+# for alder modeling, lump PSME and TSHE into a CONIFER class
 if (modelType == "ALRU") {
   # create a new "species" code that groups ACCI, PISI, and RHPU into OTHER
   # also lumped PSME and TSHE into CONIFER type
@@ -680,12 +693,11 @@ table(trainData$SpeciesGroup)
 
 summary(trainData$TrueRadius)
 
-# drop some metrics: return counts
+# DROP some metrics: mostly return counts and min/max height values
 # column 3 has the actual species, column 258 has the species group identifier
 trainData <- trainData[, -c(1:30, 103:104, 118:131, 204:205, 212:217)]   # by SpeciesGroup
 
-# drop records for trees with no returns...RP## = NA
-# this drops 3 trees...1 had 1 point and the other 2 0 points
+# drop records for trees with missing metrics
 trainData <- na.omit(trainData)
 
 # show some summary info
@@ -704,10 +716,7 @@ trainData %>%
 
 # *****************************************************************************
 # *****************************************************************************
-# *****************************************************************************
-# *****************************************************************************
-# *****************************************************************************
-# at this point, we have good data
+# at this point, we should have good data
 
 
 # *****************************************************************************
@@ -1096,6 +1105,10 @@ if (TRUE & modelType == "ALRU") {
 result <-   readRDS("Sensitivity_Drone_RF_AlderModel.rds")
 
 
+# *****************************************************************************
+# Probably best to stop here...code below needs work before it can be used
+# with the drone lidar data
+# *****************************************************************************
 
 
 
@@ -1107,245 +1120,251 @@ result <-   readRDS("Sensitivity_Drone_RF_AlderModel.rds")
 
 
 # Code to use R model to map ALRU and PSME over lidar coverage ext --------
-
+#
+# the layers used depend on the classification model results above
+#
+# NOTE: I have not modified this code to work with the drone lidar. The layers
+# that are manipulated below are specific to the original alder classification work
 # *****************************************************************************
 # build a forest mask using cover and P99 height
 # we want areas >= 10 feet tall and with 10+% cover
 #
 # only need to do this once
 # *****************************************************************************
-if (FALSE) {
-  # load layers for mask
-  P99 <- raster(paste0(rasterFolder, "elev_P99_4p5plus_5FEET.img"))
-  cover <- raster(paste0(rasterFolder, "1st_cover_above4p5_5FEET.img"))
-  
-  # values for mask...we want >= 10' height and >= 10% cover
-  htTreshold <- 10
-  coverThreshold <- 10
-  
-  mask <- (P99 >= htTreshold) & (cover >= coverThreshold)
-  writeRaster(mask, paste0(resultsFolder, "ForestMask.img"), format = "HFA", overwrite = TRUE)
-  
-  #mapview(mask)
-  #summary(mask)
-  
-  rm(P99)
-  rm(cover)
-}
-
-# *****************************************************************************
-# compute various metrics and write to results folder...these are 
-# not part of the "regular" metrics...relative to P95
-#
-# not all of the metrics/layers that are computed or converted to ASCII
-# raster format are used in the "final" models. I have code from various 
-# testing scenarios that I didn't bother to clean out.
-# *****************************************************************************
-if (FALSE) {
-  IntP95 <- raster(paste0(rasterFolder, "FIRST_RETURNS_int_P95_4p5plus_5FEET.img"))
-  IntP01 <- raster(paste0(rasterFolder, "FIRST_RETURNS_int_P01_4p5plus_5FEET.img"))
-  IntP05 <- raster(paste0(rasterFolder, "FIRST_RETURNS_int_P05_4p5plus_5FEET.img"))
-  IntP70 <- raster(paste0(rasterFolder, "FIRST_RETURNS_int_P70_4p5plus_5FEET.img"))
-  
-  IntRP01 <- IntP01 / IntP95
-  IntRP05 <- IntP05 / IntP95
-  IntRP70 <- IntP70 / IntP95
-  
-  writeRaster(IntRP01, paste0(resultsFolder, "FIRST_RETURNS_int_RP01_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
-  showWKT(proj4string(IntRP01), file= paste0(resultsFolder, "FIRST_RETURNS_int_RP01_4p5plus_5FEET.prj")) 
-  writeRaster(IntRP05, paste0(resultsFolder, "FIRST_RETURNS_int_RP05_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
-  showWKT(proj4string(IntRP05), file= paste0(resultsFolder, "FIRST_RETURNS_int_RP05_4p5plus_5FEET.prj")) 
-  writeRaster(IntRP70, paste0(resultsFolder, "FIRST_RETURNS_int_RP70_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
-  showWKT(proj4string(IntRP70), file= paste0(resultsFolder, "FIRST_RETURNS_int_RP70_4p5plus_5FEET.prj")) 
-  
-  rm(IntP01)
-  rm(IntP05)
-  rm(IntP70)
-  rm(IntP95)
-  rm(IntRP01)
-  rm(IntRP05)
-}
-
-# *****************************************************************************
-# compute difference between mean of first return heights and mean of last
-# return heights
-# *****************************************************************************
-if (FALSE) {
-  firstMean <- raster(paste0(rasterFolder, "FIRST_RETURNS_elev_ave_4p5plus_5FEET.img"))
-  lastMean <- raster(paste0(lastRasterFolder, "elev_ave_0p0plus_5FEET.img"))
-  firstP90 <- raster(paste0(rasterFolder, "FIRST_RETURNS_elev_P90_4p5plus_5FEET.img"))
-  lastP10 <- raster(paste0(lastRasterFolder, "elev_P10_0p0plus_5FEET.img"))
-  
-  diff <- firstMean - lastMean
-  diffP <- firstP90 - lastP10
-  
-  writeRaster(diff, paste0(resultsFolder, "FirstMean_Minus_LastMean_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
-  showWKT(proj4string(diff), file= paste0(resultsFolder, "FirstMean_Minus_LastMean_4p5plus_5FEET.prj")) 
-  writeRaster(diff, paste0(resultsFolder, "FirstMean_Minus_LastMean_4p5plus_5FEET.img"), format = "HFA", overwrite = TRUE, NAflag = -9999)
-  writeRaster(diffP, paste0(resultsFolder, "FirstP90_Minus_LastP10_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
-  showWKT(proj4string(diffP), file= paste0(resultsFolder, "FirstP90_Minus_LastP10_4p5plus_5FEET.prj")) 
-  writeRaster(diffP, paste0(resultsFolder, "FirstP90_Minus_LastP10_4p5plus_5FEET.img"), format = "HFA", overwrite = TRUE, NAflag = -9999)
-  
-  rm(firstMean)
-  rm(lastMean)
-  rm(diff)
-  rm(firstP90)
-  rm(lastP10)
-  rm(diffP)
-}
-
-# *****************************************************************************
-# layers for AsciiGridPredict need to be in ASCII raster format...do 
-# conversion and write to the results folder
-# *****************************************************************************
-if (FALSE) {
-  P90 <- raster(paste0(rasterFolder, "elev_P90_4p5plus_5FEET.img"))
-  P95 <- raster(paste0(rasterFolder, "elev_P95_4p5plus_5FEET.img"))
-  
-  RP90 <- P90 / P95
-
-  writeRaster(RP90, paste0(resultsFolder, "elev_RP90_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
-  showWKT(proj4string(RP90), file= paste0(resultsFolder, "elev_RP90_4p5plus_5FEET.prj")) 
-  writeRaster(RP90, paste0(resultsFolder, "elev_RP90_4p5plus_5FEET.img"), format = "HFA", overwrite = TRUE, NAflag = -9999)
-}
-
-# *****************************************************************************
-# layers for AsciiGridPredict need to be in ASCII raster format...do 
-# conversion and write to the results folder
-# *****************************************************************************
-convert <- function(
-  layerName,
-  rasterFolder,
-  resultsFolder
-) {
-  if (!file.exists(paste0(resultsFolder, layerName, ".asc"))) {
-    t <- raster(paste0(rasterFolder, layerName, ".img"))
-    writeRaster(t, paste0(resultsFolder, layerName, ".asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
-    showWKT(proj4string(t), file= paste0(resultsFolder, layerName, ".prj")) 
-    rm(t)
-  } else {
-    cat("File already exists\n")
+if (FALSE) {  # don't use this code until it hass been modified for the drone lidar
+  if (FALSE) {
+    # load layers for mask
+    P99 <- raster(paste0(rasterFolder, "elev_P99_4p5plus_5FEET.img"))
+    cover <- raster(paste0(rasterFolder, "1st_cover_above4p5_5FEET.img"))
+    
+    # values for mask...we want >= 10' height and >= 10% cover
+    htTreshold <- 10
+    coverThreshold <- 10
+    
+    mask <- (P99 >= htTreshold) & (cover >= coverThreshold)
+    writeRaster(mask, paste0(resultsFolder, "ForestMask.img"), format = "HFA", overwrite = TRUE)
+    
+    #mapview(mask)
+    #summary(mask)
+    
+    rm(P99)
+    rm(cover)
   }
-}
-
-if (FALSE) {
-  convert("FIRST_RETURNS_int_P60_4p5plus_5FEET", rasterFolder, resultsFolder)
-  convert("int_P30_4p5plus_5FEET", rasterFolder, resultsFolder)
   
-  convert("FIRST_RETURNS_int_P80_4p5plus_5FEET", rasterFolder, resultsFolder)
-  convert("int_IQ_4p5plus_5FEET", rasterFolder, resultsFolder)
-  convert("int_P20_4p5plus_5FEET", rasterFolder, resultsFolder)
+  # *****************************************************************************
+  # compute various metrics and write to results folder...these are 
+  # not part of the "regular" metrics...relative to P95
+  #
+  # not all of the metrics/layers that are computed or converted to ASCII
+  # raster format are used in the "final" models. I have code from various 
+  # testing scenarios that I didn't bother to clean out.
+  # *****************************************************************************
+  if (FALSE) {
+    IntP95 <- raster(paste0(rasterFolder, "FIRST_RETURNS_int_P95_4p5plus_5FEET.img"))
+    IntP01 <- raster(paste0(rasterFolder, "FIRST_RETURNS_int_P01_4p5plus_5FEET.img"))
+    IntP05 <- raster(paste0(rasterFolder, "FIRST_RETURNS_int_P05_4p5plus_5FEET.img"))
+    IntP70 <- raster(paste0(rasterFolder, "FIRST_RETURNS_int_P70_4p5plus_5FEET.img"))
+    
+    IntRP01 <- IntP01 / IntP95
+    IntRP05 <- IntP05 / IntP95
+    IntRP70 <- IntP70 / IntP95
+    
+    writeRaster(IntRP01, paste0(resultsFolder, "FIRST_RETURNS_int_RP01_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
+    showWKT(proj4string(IntRP01), file= paste0(resultsFolder, "FIRST_RETURNS_int_RP01_4p5plus_5FEET.prj")) 
+    writeRaster(IntRP05, paste0(resultsFolder, "FIRST_RETURNS_int_RP05_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
+    showWKT(proj4string(IntRP05), file= paste0(resultsFolder, "FIRST_RETURNS_int_RP05_4p5plus_5FEET.prj")) 
+    writeRaster(IntRP70, paste0(resultsFolder, "FIRST_RETURNS_int_RP70_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
+    showWKT(proj4string(IntRP70), file= paste0(resultsFolder, "FIRST_RETURNS_int_RP70_4p5plus_5FEET.prj")) 
+    
+    rm(IntP01)
+    rm(IntP05)
+    rm(IntP70)
+    rm(IntP95)
+    rm(IntRP01)
+    rm(IntRP05)
+  }
   
-  convert("FIRST_RETURNS_int_kurtosis_4p5plus_5FEET", rasterFolder, resultsFolder)
-  convert("FIRST_RETURNS_elev_canopy_relief_ratio_5FEET", rasterFolder, resultsFolder)
-  convert("all_cover_above4p5_5FEET", rasterFolder, resultsFolder)
-
-  convert("FIRST_RETURNS_all_cover_above_mean_5FEET", rasterFolder, resultsFolder)
+  # *****************************************************************************
+  # compute difference between mean of first return heights and mean of last
+  # return heights
+  # *****************************************************************************
+  if (FALSE) {
+    firstMean <- raster(paste0(rasterFolder, "FIRST_RETURNS_elev_ave_4p5plus_5FEET.img"))
+    lastMean <- raster(paste0(lastRasterFolder, "elev_ave_0p0plus_5FEET.img"))
+    firstP90 <- raster(paste0(rasterFolder, "FIRST_RETURNS_elev_P90_4p5plus_5FEET.img"))
+    lastP10 <- raster(paste0(lastRasterFolder, "elev_P10_0p0plus_5FEET.img"))
+    
+    diff <- firstMean - lastMean
+    diffP <- firstP90 - lastP10
+    
+    writeRaster(diff, paste0(resultsFolder, "FirstMean_Minus_LastMean_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
+    showWKT(proj4string(diff), file= paste0(resultsFolder, "FirstMean_Minus_LastMean_4p5plus_5FEET.prj")) 
+    writeRaster(diff, paste0(resultsFolder, "FirstMean_Minus_LastMean_4p5plus_5FEET.img"), format = "HFA", overwrite = TRUE, NAflag = -9999)
+    writeRaster(diffP, paste0(resultsFolder, "FirstP90_Minus_LastP10_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
+    showWKT(proj4string(diffP), file= paste0(resultsFolder, "FirstP90_Minus_LastP10_4p5plus_5FEET.prj")) 
+    writeRaster(diffP, paste0(resultsFolder, "FirstP90_Minus_LastP10_4p5plus_5FEET.img"), format = "HFA", overwrite = TRUE, NAflag = -9999)
+    
+    rm(firstMean)
+    rm(lastMean)
+    rm(diff)
+    rm(firstP90)
+    rm(lastP10)
+    rm(diffP)
+  }
   
-  # convert("FIRST_RETURNS_all_cover_above_mean_5FEET", rasterFolder, resultsFolder)
-  # convert("FIRST_RETURNS_int_P05_4p5plus_5FEET", rasterFolder, resultsFolder)
-  # convert("FIRST_RETURNS_int_P01_4p5plus_5FEET", rasterFolder, resultsFolder)
-  # convert("FIRST_RETURNS_int_IQ_4p5plus_5FEET", rasterFolder, resultsFolder)
-  # convert("FIRST_RETURNS_all_1st_cover_above4p5_5FEET", rasterFolder, resultsFolder)
-  # convert("FIRST_RETURNS_int_AAD_4p5plus_5FEET", rasterFolder, resultsFolder)
-  convert("FIRST_RETURNS_int_Lkurtosis_4p5plus_5FEET", rasterFolder, resultsFolder)
-  convert("FIRST_RETURNS_elev_Lskewness_4p5plus_5FEET", rasterFolder, resultsFolder)
-}
-
-# *****************************************************************************
-# use the model to predict over the area covered by metrics
-#
-# ***** some of the naming is confusing because the metrics computed for the 
-# tree crowns used only first returns. for the cover metrics, we need to also
-# use those computed using only first returns. For the tree metrics, the values
-# in the FIRST_RETURN layers should match those in the layers without 
-# FIRST_RETURN in the names
-# *****************************************************************************
-if (TRUE) {
-  # read RF model
+  # *****************************************************************************
+  # layers for AsciiGridPredict need to be in ASCII raster format...do 
+  # conversion and write to the results folder
+  # *****************************************************************************
+  if (FALSE) {
+    P90 <- raster(paste0(rasterFolder, "elev_P90_4p5plus_5FEET.img"))
+    P95 <- raster(paste0(rasterFolder, "elev_P95_4p5plus_5FEET.img"))
+    
+    RP90 <- P90 / P95
+  
+    writeRaster(RP90, paste0(resultsFolder, "elev_RP90_4p5plus_5FEET.asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
+    showWKT(proj4string(RP90), file= paste0(resultsFolder, "elev_RP90_4p5plus_5FEET.prj")) 
+    writeRaster(RP90, paste0(resultsFolder, "elev_RP90_4p5plus_5FEET.img"), format = "HFA", overwrite = TRUE, NAflag = -9999)
+  }
+  
+  # *****************************************************************************
+  # layers for AsciiGridPredict need to be in ASCII raster format...do 
+  # conversion and write to the results folder
+  # *****************************************************************************
+  convert <- function(
+    layerName,
+    rasterFolder,
+    resultsFolder
+  ) {
+    if (!file.exists(paste0(resultsFolder, layerName, ".asc"))) {
+      t <- raster(paste0(rasterFolder, layerName, ".img"))
+      writeRaster(t, paste0(resultsFolder, layerName, ".asc"), format = "ascii", overwrite = TRUE, NAflag = -9999)
+      showWKT(proj4string(t), file= paste0(resultsFolder, layerName, ".prj")) 
+      rm(t)
+    } else {
+      cat("File already exists\n")
+    }
+  }
+  
+  if (FALSE) {
+    convert("FIRST_RETURNS_int_P60_4p5plus_5FEET", rasterFolder, resultsFolder)
+    convert("int_P30_4p5plus_5FEET", rasterFolder, resultsFolder)
+    
+    convert("FIRST_RETURNS_int_P80_4p5plus_5FEET", rasterFolder, resultsFolder)
+    convert("int_IQ_4p5plus_5FEET", rasterFolder, resultsFolder)
+    convert("int_P20_4p5plus_5FEET", rasterFolder, resultsFolder)
+    
+    convert("FIRST_RETURNS_int_kurtosis_4p5plus_5FEET", rasterFolder, resultsFolder)
+    convert("FIRST_RETURNS_elev_canopy_relief_ratio_5FEET", rasterFolder, resultsFolder)
+    convert("all_cover_above4p5_5FEET", rasterFolder, resultsFolder)
+  
+    convert("FIRST_RETURNS_all_cover_above_mean_5FEET", rasterFolder, resultsFolder)
+    
+    # convert("FIRST_RETURNS_all_cover_above_mean_5FEET", rasterFolder, resultsFolder)
+    # convert("FIRST_RETURNS_int_P05_4p5plus_5FEET", rasterFolder, resultsFolder)
+    # convert("FIRST_RETURNS_int_P01_4p5plus_5FEET", rasterFolder, resultsFolder)
+    # convert("FIRST_RETURNS_int_IQ_4p5plus_5FEET", rasterFolder, resultsFolder)
+    # convert("FIRST_RETURNS_all_1st_cover_above4p5_5FEET", rasterFolder, resultsFolder)
+    # convert("FIRST_RETURNS_int_AAD_4p5plus_5FEET", rasterFolder, resultsFolder)
+    convert("FIRST_RETURNS_int_Lkurtosis_4p5plus_5FEET", rasterFolder, resultsFolder)
+    convert("FIRST_RETURNS_elev_Lskewness_4p5plus_5FEET", rasterFolder, resultsFolder)
+  }
+  
+  # *****************************************************************************
+  # use the model to predict over the area covered by metrics
+  #
+  # ***** some of the naming is confusing because the metrics computed for the 
+  # tree crowns used only first returns. for the cover metrics, we need to also
+  # use those computed using only first returns. For the tree metrics, the values
+  # in the FIRST_RETURN layers should match those in the layers without 
+  # FIRST_RETURN in the names
+  # *****************************************************************************
+  if (TRUE) {
+    # read RF model
+    if (modelType == "ALRU") {
+      typeRF <- readRDS("FINAL_RF_AlderModel.rds")
+    } else {
+      typeRF <- readRDS("FINAL_RF_DW_WH_model.rds")
+    }
+    
+    # build list of input layers...corresponds to the variables used for the classifier...also in the same order
+    if (modelType == "ALRU") {
+      layers <- list(First.Int.P60 = paste0(resultsFolder, "FIRST_RETURNS_int_P60_4p5plus_5FEET.asc")
+                     # , First.Int.P80 = paste0(resultsFolder, "FIRST_RETURNS_int_P80_4p5plus_5FEET.asc")
+                     # , Percentage.all.returns.above.mean = paste0(resultsFolder, "FIRST_RETURNS_all_cover_above_mean_5FEET.asc")
+                     # , Int.P01 = paste0(resultsFolder, "FIRST_RETURNS_int_P01_4p5plus_5FEET.asc")
+                     # , X.All.returns.above.4.50.....Total.first.returns....100 = paste0(resultsFolder, "FIRST_RETURNS_all_1st_cover_above4p5_5FEET.asc")
+                     # , Int.RP01 = paste0(resultsFolder, "FIRST_RETURNS_int_RP01_4p5plus_5FEET.asc")
+                     # , Int.P05 = paste0(resultsFolder, "FIRST_RETURNS_int_P05_4p5plus_5FEET.asc")
+                     # , Int.RP05 = paste0(resultsFolder, "FIRST_RETURNS_int_RP05_4p5plus_5FEET.asc")
+                     , Int.IQ = paste0(resultsFolder, "int_IQ_4p5plus_5FEET.asc")
+                     # , Int.P20 = paste0(resultsFolder, "int_P20_4p5plus_5FEET.asc")
+                     , Int.P30 = paste0(resultsFolder, "int_P30_4p5plus_5FEET.asc")
+                     # , Int.L.kurtosis = paste0(resultsFolder, "FIRST_RETURNS_int_Lkurtosis_4p5plus_5FEET.asc")
+                     # , Int.AAD = paste0(resultsFolder, "int_AAD_4p5plus_5FEET.asc")
+                     , First.mean.minus.Last.mean = paste0(resultsFolder, "FirstMean_Minus_LastMean_4p5plus_5FEET.asc")
+      )
+      AsciiGridPredict(typeRF, layers, paste0(resultsFolder, "CellType_5FEET.asc"), xtypes = NULL, rows = NULL)
+    } else {
+      layers <- list(First.Int.RP70 = paste0(resultsFolder, "FIRST_RETURNS_int_RP70_4p5plus_5FEET.asc")
+                     , First.Int.L.kurtosis = paste0(resultsFolder, "FIRST_RETURNS_int_Lkurtosis_4p5plus_5FEET.asc")
+                     , Percentage.all.returns.above.4.50 = paste0(resultsFolder, "all_cover_above4p5_5FEET.asc")
+                     , First.Canopy.relief.ratio = paste0(resultsFolder, "FIRST_RETURNS_elev_canopy_relief_ratio_5FEET.asc")
+                     , First.Percentage.all.returns.above.mean = paste0(resultsFolder, "FIRST_RETURNS_all_cover_above_mean_5FEET.asc")
+                     , First.Elev.L.skewness = paste0(resultsFolder, "FIRST_RETURNS_elev_Lskewness_4p5plus_5FEET.asc")
+                     , Elev.RP90 = paste0(resultsFolder, "elev_RP90_4p5plus_5FEET.asc")
+                     , First.P90.minus.Last.P10 = paste0(resultsFolder, "FirstP90_Minus_LastP10_4p5plus_5FEET.asc")
+                     # , Int.P01 = paste0(resultsFolder, "FIRST_RETURNS_int_P01_4p5plus_5FEET.asc")
+                     # , X.All.returns.above.4.50.....Total.first.returns....100 = paste0(resultsFolder, "FIRST_RETURNS_all_1st_cover_above4p5_5FEET.asc")
+                     # , Int.RP01 = paste0(resultsFolder, "FIRST_RETURNS_int_RP01_4p5plus_5FEET.asc")
+                     # , Int.P05 = paste0(resultsFolder, "FIRST_RETURNS_int_P05_4p5plus_5FEET.asc")
+                     # , Int.RP05 = paste0(resultsFolder, "FIRST_RETURNS_int_RP05_4p5plus_5FEET.asc")
+                     # , First.Int.kurtosis = paste0(resultsFolder, "FIRST_RETURNS_int_kurtosis_4p5plus_5FEET.asc")
+                     # , Int.AAD = paste0(resultsFolder, "int_AAD_4p5plus_5FEET.asc")
+                     # , First.mean.minus.Last.mean = paste0(resultsFolder, "FirstMean_Minus_LastMean_4p5plus_5FEET.asc")
+      )
+      AsciiGridPredict(typeRF, layers, paste0(resultsFolder, "CellType_DFWH_5FEET.asc"), xtypes = NULL, rows = NULL)
+    }
+  }
+  
+  # *****************************************************************************
+  # load the prediction layer and display
+  #
+  # the code below mixes the 2 models, applies the mask, and displays things
+  # *****************************************************************************
+  # read mask
+  mask <- raster(paste0(resultsFolder, "ForestMask.img"))
+  
+  # convert the AsciiGridPredict outputs to IMAGINE format...need to create a projection file
+  # before doing this or else the IMAGEINE file won't have projection information
   if (modelType == "ALRU") {
-    typeRF <- readRDS("FINAL_RF_AlderModel.rds")
+    type <- raster(paste0(resultsFolder, "CellType_5FEET.asc"))
+    showWKT(proj4string(mask), file= paste0(resultsFolder, "CellType_5FEET.prj")) 
+    writeRaster(type, paste0(resultsFolder, "CellType_5FEET.img"), format = "HFA", overwrite = TRUE)
   } else {
-    typeRF <- readRDS("FINAL_RF_DW_WH_model.rds")
+    DFWH_type <- raster(paste0(resultsFolder, "CellType_DFWH_5FEET.asc"))
+    showWKT(proj4string(mask), file= paste0(resultsFolder, "CellType_DFWH_5FEET.prj")) 
+    writeRaster(DFWH_type, paste0(resultsFolder, "CellType_DFWH_5FEET.img"), format = "HFA", overwrite = TRUE)
   }
   
-  # build list of input layers...corresponds to the variables used for the classifier...also in the same order
-  if (modelType == "ALRU") {
-    layers <- list(First.Int.P60 = paste0(resultsFolder, "FIRST_RETURNS_int_P60_4p5plus_5FEET.asc")
-                   # , First.Int.P80 = paste0(resultsFolder, "FIRST_RETURNS_int_P80_4p5plus_5FEET.asc")
-                   # , Percentage.all.returns.above.mean = paste0(resultsFolder, "FIRST_RETURNS_all_cover_above_mean_5FEET.asc")
-                   # , Int.P01 = paste0(resultsFolder, "FIRST_RETURNS_int_P01_4p5plus_5FEET.asc")
-                   # , X.All.returns.above.4.50.....Total.first.returns....100 = paste0(resultsFolder, "FIRST_RETURNS_all_1st_cover_above4p5_5FEET.asc")
-                   # , Int.RP01 = paste0(resultsFolder, "FIRST_RETURNS_int_RP01_4p5plus_5FEET.asc")
-                   # , Int.P05 = paste0(resultsFolder, "FIRST_RETURNS_int_P05_4p5plus_5FEET.asc")
-                   # , Int.RP05 = paste0(resultsFolder, "FIRST_RETURNS_int_RP05_4p5plus_5FEET.asc")
-                   , Int.IQ = paste0(resultsFolder, "int_IQ_4p5plus_5FEET.asc")
-                   # , Int.P20 = paste0(resultsFolder, "int_P20_4p5plus_5FEET.asc")
-                   , Int.P30 = paste0(resultsFolder, "int_P30_4p5plus_5FEET.asc")
-                   # , Int.L.kurtosis = paste0(resultsFolder, "FIRST_RETURNS_int_Lkurtosis_4p5plus_5FEET.asc")
-                   # , Int.AAD = paste0(resultsFolder, "int_AAD_4p5plus_5FEET.asc")
-                   , First.mean.minus.Last.mean = paste0(resultsFolder, "FirstMean_Minus_LastMean_4p5plus_5FEET.asc")
-    )
-    AsciiGridPredict(typeRF, layers, paste0(resultsFolder, "CellType_5FEET.asc"), xtypes = NULL, rows = NULL)
-  } else {
-    layers <- list(First.Int.RP70 = paste0(resultsFolder, "FIRST_RETURNS_int_RP70_4p5plus_5FEET.asc")
-                   , First.Int.L.kurtosis = paste0(resultsFolder, "FIRST_RETURNS_int_Lkurtosis_4p5plus_5FEET.asc")
-                   , Percentage.all.returns.above.4.50 = paste0(resultsFolder, "all_cover_above4p5_5FEET.asc")
-                   , First.Canopy.relief.ratio = paste0(resultsFolder, "FIRST_RETURNS_elev_canopy_relief_ratio_5FEET.asc")
-                   , First.Percentage.all.returns.above.mean = paste0(resultsFolder, "FIRST_RETURNS_all_cover_above_mean_5FEET.asc")
-                   , First.Elev.L.skewness = paste0(resultsFolder, "FIRST_RETURNS_elev_Lskewness_4p5plus_5FEET.asc")
-                   , Elev.RP90 = paste0(resultsFolder, "elev_RP90_4p5plus_5FEET.asc")
-                   , First.P90.minus.Last.P10 = paste0(resultsFolder, "FirstP90_Minus_LastP10_4p5plus_5FEET.asc")
-                   # , Int.P01 = paste0(resultsFolder, "FIRST_RETURNS_int_P01_4p5plus_5FEET.asc")
-                   # , X.All.returns.above.4.50.....Total.first.returns....100 = paste0(resultsFolder, "FIRST_RETURNS_all_1st_cover_above4p5_5FEET.asc")
-                   # , Int.RP01 = paste0(resultsFolder, "FIRST_RETURNS_int_RP01_4p5plus_5FEET.asc")
-                   # , Int.P05 = paste0(resultsFolder, "FIRST_RETURNS_int_P05_4p5plus_5FEET.asc")
-                   # , Int.RP05 = paste0(resultsFolder, "FIRST_RETURNS_int_RP05_4p5plus_5FEET.asc")
-                   # , First.Int.kurtosis = paste0(resultsFolder, "FIRST_RETURNS_int_kurtosis_4p5plus_5FEET.asc")
-                   # , Int.AAD = paste0(resultsFolder, "int_AAD_4p5plus_5FEET.asc")
-                   # , First.mean.minus.Last.mean = paste0(resultsFolder, "FirstMean_Minus_LastMean_4p5plus_5FEET.asc")
-    )
-    AsciiGridPredict(typeRF, layers, paste0(resultsFolder, "CellType_DFWH_5FEET.asc"), xtypes = NULL, rows = NULL)
-  }
-}
-
-# *****************************************************************************
-# load the prediction layer and display
-#
-# the code below mixes the 2 models, applies the mask, and displays things
-# *****************************************************************************
-# read mask
-mask <- raster(paste0(resultsFolder, "ForestMask.img"))
-
-# convert the AsciiGridPredict outputs to IMAGINE format...need to create a projection file
-# before doing this or else the IMAGEINE file won't have projection information
-if (modelType == "ALRU") {
-  type <- raster(paste0(resultsFolder, "CellType_5FEET.asc"))
-  showWKT(proj4string(mask), file= paste0(resultsFolder, "CellType_5FEET.prj")) 
-  writeRaster(type, paste0(resultsFolder, "CellType_5FEET.img"), format = "HFA", overwrite = TRUE)
-} else {
-  DFWH_type <- raster(paste0(resultsFolder, "CellType_DFWH_5FEET.asc"))
-  showWKT(proj4string(mask), file= paste0(resultsFolder, "CellType_DFWH_5FEET.prj")) 
-  writeRaster(DFWH_type, paste0(resultsFolder, "CellType_DFWH_5FEET.img"), format = "HFA", overwrite = TRUE)
-}
-
-# reclassify so areas with alder are 0 and areas NOT alder are 1
-# we only want results for the DFWH classification for areas that are not alder
-if (modelType != "ALRU") {
-  nonAlder <- reclassify(type, c(0.5, 1.5, 0,  1.5, 2.5, 1))
-
-  mapview(nonAlder, method = "ngb", na.color = "#FFFFFF80")
+  # reclassify so areas with alder are 0 and areas NOT alder are 1
+  # we only want results for the DFWH classification for areas that are not alder
+  if (modelType != "ALRU") {
+    nonAlder <- reclassify(type, c(0.5, 1.5, 0,  1.5, 2.5, 1))
   
-  DFWH_nonAlder_type <- DFWH_type * nonAlder * mask
-  writeRaster(DFWH_nonAlder_type, paste0(resultsFolder, "CellType_DFWH_nonAlder_5FEET.img"), format = "HFA", overwrite = TRUE)
-  mapview(DFWH_nonAlder_type, method = "ngb", na.color = "#FFFFFF80")
+    mapview(nonAlder, method = "ngb", na.color = "#FFFFFF80")
+    
+    DFWH_nonAlder_type <- DFWH_type * nonAlder * mask
+    writeRaster(DFWH_nonAlder_type, paste0(resultsFolder, "CellType_DFWH_nonAlder_5FEET.img"), format = "HFA", overwrite = TRUE)
+    mapview(DFWH_nonAlder_type, method = "ngb", na.color = "#FFFFFF80")
+  }
+  
+  map <- type * mask
+  
+  #mapview(type, maxpixels =  ncell(type), col.regions = c("green", "yellow"))
+  mapview(type, zcol = "CellType_5FEET", col.regions = c("green", "yellow"), method = "ngb", na.color = "#FFFFFF80")
+  
+  # KML layer doesn't look very good due to resampling/compression issues (I think)
+  type_ll <- projectRaster(type, crs = 4326, method = "ngb")
+  KML(type_ll, paste0(resultsFolder, "CellType_5FEET.kml"), maxpixels = ncell(type_ll), col = c("green", "yellow"), overwrite = TRUE)
 }
-
-map <- type * mask
-
-#mapview(type, maxpixels =  ncell(type), col.regions = c("green", "yellow"))
-mapview(type, zcol = "CellType_5FEET", col.regions = c("green", "yellow"), method = "ngb", na.color = "#FFFFFF80")
-
-# KML layer doesn't look very good due to resampling/compression issues (I think)
-type_ll <- projectRaster(type, crs = 4326, method = "ngb")
-KML(type_ll, paste0(resultsFolder, "CellType_5FEET.kml"), maxpixels = ncell(type_ll), col = c("green", "yellow"), overwrite = TRUE)
