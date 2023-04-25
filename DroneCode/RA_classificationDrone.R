@@ -379,6 +379,10 @@ library(readxl)
 # This is the folder where the results will be written...make sure it exists
 # or change it to a folder that does exist
 #
+# B1E1_TP_50_100_Trees_Project.shp missing
+# B1E1_TP_75_125_Trees_Project.shp is missing
+# B1E1_TP_75_75_Trees_Project.shp is missing
+# missing plots added back to metrics 4/18/23
 # NOTE: the DroneResults folder is not copied to the GitHub repository
 setwd("E:/Backup/R_Stuff/AlderClassification/DroneResults")
 
@@ -386,7 +390,7 @@ setwd("E:/Backup/R_Stuff/AlderClassification/DroneResults")
 # There are 2 shapefiles for each plot. One has the turning point and the other has the trees
 # The plots.txt file lists the identifiers for the plots that have alder (non-alder plots are not
 # used in the classification model building process)
-dataFolder <- "E:/Backup/R_Stuff/RAClassification/Georeferenced_tree_plots_2020_sampling/"
+dataFolder <- "E:/Backup/R_Stuff/RAClassification/2023Analysis/"
 
 # this is the direct link to the shared google drive
 #dataFolder <- "I:/.shortcut-targets-by-id/1j0spS2MzKbPSsif_DEv28S0AjAenk_Hj/Georeferenced_tree_plots_2020_sampling/"
@@ -444,7 +448,8 @@ if (file.exists("PlotProcessing.txt")) {
 logCon <- file("PlotProcessing.txt", "wt")
 
 for (i in 1:length(plotList)) {
-  # get the 4 letter plot identifier
+#for (i in 1:1) {
+    # get the 4 letter plot identifier
   plot <- substr(plotList[i], 1, 4)
   
   # see if we have lidar data
@@ -466,7 +471,7 @@ close(logCon)
 # *****************************************************************************
 # merge all circles and metrics for plots and write geopackage file
 # *****************************************************************************
-con <- file("plots.txt")
+con <- file("../plots.txt")
 plotList <- readLines(con)
 close(con)
 
@@ -501,10 +506,11 @@ modelTrees <- allTrees
 # trees and trees overlapped by same species trees, compute new metrics
 # and write CSV file with all trees and metrics
 # *****************************************************************************
-con <- file("plots.txt")
+con <- file("../plots.txt")
 plotList <- readLines(con)
 close(con)
 
+plotList <- plotList[-c(21, 22, 45)]
 for (i in 1:length(plotList)) {
   if (file.exists(paste0(plotList[i], "_TreeMetrics.csv"))) {
     # read plot file
