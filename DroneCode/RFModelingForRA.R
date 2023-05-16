@@ -12,12 +12,12 @@
 # *****************************************************************************
 # I think all of these are used but not all are needed if you don't need 
 # fancy graphics or maps
-library(sf)
-library(raster)
-library(terra)
-library(mapview)
-library(rgdal)
-library(rgeos)
+#library(sf)
+#library(raster)
+#library(terra)
+#library(mapview)
+#library(rgdal)
+#library(rgeos)
 library(randomForest)
 library(caret)
 library(dplyr)
@@ -143,9 +143,12 @@ table(testingData$SpeciesGroup)
 # explicitly set the random number seed so we get the same results each time we run the code
 set.seed(seed)
 
+# Code to apply RF model to map RA over units -----------------------------
+
+  
 # code to limit the variable set used for the classification model and use the model to map species
 # over the experimental unit using raster layers with the same metrics
-if (TRUE) {
+if (FALSE) {
   # subset using just 6 predictors and the species group...this allows us to predict over a larger area without
   # needing all of the metric layers
   trainingDataSubset <- trainingData[, c("Elev.kurtosis", "Elev.skewness", "Int.L2", "First.Elev.kurtosis", "Int.stddev", "Int.L1", "SpeciesGroup")]
@@ -158,7 +161,7 @@ if (TRUE) {
                          , mtry = 6, ntree = 1000
   )
   typeRF
-  
+
   # duplicated from above
   library(terra)
   library(raster)
@@ -235,7 +238,7 @@ if (TRUE) {
     m2 <- mapview(trees, zcol = "SpeciesGroup")
     m <- m1 + m2
   
-    # save an image...not rendering the tree
+    # save an image...not rendering the trees
     mapshot(m, file = paste0("Plot_", plot, "_Results.png"))
     
     # write off a KML file for google earth...must reproject to lat-lon
@@ -255,6 +258,9 @@ if (TRUE) {
     
   }
 }
+
+
+# Code to fit RF model using all metrics ----------------------------------
 
 # use sampsize to balance the sample for each tree. this is needed since we have many more
 # conifers than alders and more PSME than TSHE
